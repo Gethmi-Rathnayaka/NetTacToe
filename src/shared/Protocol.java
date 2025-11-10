@@ -35,6 +35,8 @@ public final class Protocol {
     public static final String SESSION_END = "SESSION_END";
     public static final String MESSAGE = "MESSAGE";
     public static final String RESTART = "RESTART";
+    public static final String BOARD_STATE = "BOARD_STATE";
+    public static final String GAME_RESET = "GAME_RESET";
 
     // Persistence / utilities
     public static final String GET_SCORES = "GET_SCORES";

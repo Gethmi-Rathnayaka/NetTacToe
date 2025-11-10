@@ -1,10 +1,10 @@
 package server;
 
-import shared.Protocol;
-
+import common.Board;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import shared.Protocol;
 
 /**
  * Represents a single game session between two connected players.
@@ -23,6 +23,10 @@ public class GameSession implements Runnable {
     private final AtomicBoolean active = new AtomicBoolean(false);
     private volatile Instant startedAt;
     private volatile Instant endedAt;
+    
+    // Member 4: Game State Management
+    private final Board gameBoard = new Board();
+    private final Object boardLock = new Object();
 
     public GameSession(String sessionId, ClientHandler playerX, ClientHandler playerO, GameServer server) {
         this.sessionId = sessionId;
@@ -53,7 +57,8 @@ public class GameSession implements Runnable {
         currentTurn.set(playerX);
         server.refreshSessionView();
 
-        // Placeholder notification for Member 3 & 4.
+        // Member 4: Send initial board state and turn notifications
+        broadcastBoardUpdate();
         playerX.send(Protocol.YOUR_TURN);
         playerO.send(Protocol.OPPONENT_TURN);
     }
@@ -107,6 +112,64 @@ public class GameSession implements Runnable {
     public void setNextTurn(ClientHandler next) {
         currentTurn.set(next);
     }
+    
+    /**
+     * Member 4: Broadcast the current board state to both players
+     */
+    private void broadcastBoardUpdate() {
+        String boardData = gameBoard.serialize();
+        String lastMoveInfo = gameBoard.getLastMoveRow() + "," + gameBoard.getLastMoveCol() + "," + gameBoard.getLastMoveSymbol();
+        
+        // Send UPDATE message with board state and last move info
+        String updateMessage = String.join(Protocol.DELIMITER, 
+            Protocol.UPDATE, 
+            boardData, 
+            lastMoveInfo);
+            
+        if (playerX.isActive()) {
+            playerX.send(updateMessage);
+        }
+        if (playerO.isActive()) {
+            playerO.send(updateMessage);
+        }
+    }
+    
+    /**
+     * Member 4: Get the current board state (for debugging/admin purposes)
+     */
+    public Board getGameBoard() {
+        synchronized (boardLock) {
+            return gameBoard;
+        }
+    }
+    
+    /**
+     * Member 4: Reset the game board for restart functionality
+     */
+    public void resetBoard() {
+        synchronized (boardLock) {
+            gameBoard.reset();
+            currentTurn.set(playerX); // X always starts
+            
+            // Send game reset notification
+            if (playerX.isActive()) {
+                playerX.send(String.join(Protocol.DELIMITER, Protocol.GAME_RESET, "Game restarted"));
+            }
+            if (playerO.isActive()) {
+                playerO.send(String.join(Protocol.DELIMITER, Protocol.GAME_RESET, "Game restarted"));
+            }
+            
+            broadcastBoardUpdate();
+            
+            // Notify players of restart and turn
+            if (playerX.isActive()) {
+                playerX.send(Protocol.YOUR_TURN);
+            }
+            if (playerO.isActive()) {
+                playerO.send(Protocol.OPPONENT_TURN);
+            }
+        }
+    }
 
     public void handleMove(ClientHandler player, int row, int col) {
         if (!active.get()) {
@@ -118,8 +181,58 @@ public class GameSession implements Runnable {
             return;
         }
 
-        // Delegate to Member 4's gameplay implementation.
-        server.onMoveRequested(this, player, row, col);
+        // Member 4: Game State Management Implementation
+        synchronized (boardLock) {
+            // Validate move
+            if (!gameBoard.isValidMove(row, col)) {
+                player.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Invalid move"));
+                return;
+            }
+            
+            // Get player's symbol
+            char playerSymbol = player.getAssignedSymbol().charAt(0);
+            
+            // Make the move
+            if (!gameBoard.makeMove(row, col, playerSymbol)) {
+                player.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Move failed"));
+                return;
+            }
+            
+            // Broadcast board update to both players
+            broadcastBoardUpdate();
+            
+            // Check for game end conditions
+            char winner = gameBoard.checkWinner();
+            if (winner != Board.EMPTY) {
+                // Someone won
+                ClientHandler winnerHandler = (winner == playerSymbol) ? player : getOpponent(player);
+                ClientHandler loserHandler = (winner == playerSymbol) ? getOpponent(player) : player;
+                
+                // Send win/lose messages
+                winnerHandler.send(String.join(Protocol.DELIMITER, Protocol.WIN, "You won!"));
+                loserHandler.send(String.join(Protocol.DELIMITER, Protocol.LOSE, "You lost!"));
+                
+                // Finish the session
+                finish(Result.win(winnerHandler, loserHandler, winnerHandler.getSafeName() + " wins"));
+                return;
+            }
+            
+            if (gameBoard.isFull()) {
+                // Draw
+                playerX.send(String.join(Protocol.DELIMITER, Protocol.DRAW, "Game is a draw"));
+                playerO.send(String.join(Protocol.DELIMITER, Protocol.DRAW, "Game is a draw"));
+                finish(Result.draw("Draw - Board full"));
+                return;
+            }
+            
+            // Switch turns
+            ClientHandler opponent = getOpponent(player);
+            if (opponent != null && opponent.isActive()) {
+                setNextTurn(opponent);
+                opponent.send(Protocol.YOUR_TURN);
+                player.send(Protocol.OPPONENT_TURN);
+            }
+        }
     }
 
     public void onPlayerDisconnected(ClientHandler player) {
