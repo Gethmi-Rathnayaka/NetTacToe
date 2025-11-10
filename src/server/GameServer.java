@@ -1,9 +1,5 @@
 package server;
 
-import shared.Protocol;
-import utils.Scoreboard;
-
-import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -17,6 +13,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import javax.swing.SwingUtilities;
+import shared.Protocol;
+import utils.Scoreboard;
 
 /**
  * Entry point for the Net-Tac-Toe server component. Handles client connections,
@@ -92,10 +91,10 @@ public class GameServer {
     }
 
     private void acceptLoop() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
-            this.serverSocket = serverSocket;
+        try (ServerSocket acceptSocket = new ServerSocket(port)) {
+            this.serverSocket = acceptSocket;
             while (running.get()) {
-                Socket clientSocket = serverSocket.accept();
+                Socket clientSocket = acceptSocket.accept();
                 ClientHandler handler = new ClientHandler(clientSocket, this);
                 clientExecutor.submit(handler);
             }
@@ -174,8 +173,11 @@ public class GameServer {
             client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "No active session to restart"));
             return;
         }
-        // This will be expanded when Member 4 implements board reset logic.
+        
+        // Member 4: Implement board reset logic
         log("Restart requested by " + client.getSafeName() + " for session " + session.getSessionId());
+        session.resetBoard();
+        log("Board reset for session " + session.getSessionId());
     }
 
     private void handleQuit(ClientHandler client) {
@@ -210,16 +212,9 @@ public class GameServer {
     }
 
     public void onMoveRequested(GameSession session, ClientHandler player, int row, int col) {
-        // Placeholder until Member 4 implements full board logic.
+        // Member 4: Delegate to GameSession's board logic
         log("Move request from " + player.getSafeName() + " at (" + row + "," + col + ") in session " + session.getSessionId());
-        ClientHandler opponent = session.getOpponent(player);
-        if (opponent != null && opponent.isActive()) {
-            opponent.send(String.join(Protocol.DELIMITER, Protocol.UPDATE,
-                    player.getAssignedSymbol(), String.valueOf(row), String.valueOf(col)));
-            opponent.send(Protocol.YOUR_TURN);
-            player.send(Protocol.OPPONENT_TURN);
-            session.setNextTurn(opponent);
-        }
+        session.handleMove(player, row, col);
     }
 
     public void onSessionCompleted(GameSession session, GameSession.Result result) {
