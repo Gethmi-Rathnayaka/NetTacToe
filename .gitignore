@@ -3,4 +3,5 @@ bin/
 *.class
 
 # Ignore VS Code settings
-.vscode/
+config.bat
+node_modules

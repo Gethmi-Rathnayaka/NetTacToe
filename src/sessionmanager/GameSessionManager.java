@@ -1,10 +1,10 @@
 package sessionmanager;
 
-import server.GameServer;
 import client.GameClient;
-import javax.swing.*;
 import java.awt.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.swing.*;
+import server.GameServer;
 
 /**
  * A small GUI to start/stop the existing GameServer and spawn GameClient
@@ -111,6 +111,12 @@ public class GameSessionManager {
     }
 
     public static void main(String[] args) {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            System.err.println("Failed to set look and feel: " + e.getMessage());
+        }
+
         SwingUtilities.invokeLater(() -> new GameSessionManager().show());
     }
 }
