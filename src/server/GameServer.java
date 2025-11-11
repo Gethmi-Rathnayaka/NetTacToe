@@ -128,12 +128,49 @@ public class GameServer {
         switch (command) {
             case Protocol.JOIN -> handleJoin(client, parts);
             case Protocol.MOVE -> handleMove(client, parts);
+            case Protocol.MESSAGE -> handleClientMessage(client, message);
             case Protocol.RESTART -> handleRestart(client);
             case Protocol.QUIT -> handleQuit(client);
             case Protocol.PING -> client.send(Protocol.PONG);
             case Protocol.GET_SCORES -> handleScoreRequest(client);
+            case Protocol.LOG -> handleClientLog(client, message);
             default -> client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Unknown command: " + command));
         }
+    }
+
+    private void handleClientLog(ClientHandler client, String rawMessage) {
+        String payload = "";
+        int first = rawMessage.indexOf(' ');
+        if (first >= 0 && first + 1 < rawMessage.length()) {
+            payload = rawMessage.substring(first + 1).trim();
+        }
+        String who = client.getSafeName();
+        log("[CLIENT LOG] " + who + ": " + payload);
+    }
+
+    private void handleClientMessage(ClientHandler client, String rawMessage) {
+        // rawMessage starts with MESSAGE <payload>
+        String payload = "";
+        int firstSpace = rawMessage.indexOf(' ');
+        if (firstSpace >= 0 && firstSpace + 1 < rawMessage.length()) {
+            payload = rawMessage.substring(firstSpace + 1).trim();
+        }
+
+        GameSession session = client.getCurrentSession();
+        if (session == null) {
+            client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Not in a session"));
+            return;
+        }
+
+        ClientHandler opponent = session.getOpponent(client);
+        if (opponent == null || !opponent.isActive()) {
+            client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "No opponent connected"));
+            return;
+        }
+
+        // Forward message to opponent, prefix with sender's safe name
+        String forward = String.join(Protocol.DELIMITER, Protocol.MESSAGE, client.getSafeName(), payload);
+        opponent.send(forward);
     }
 
     private void handleJoin(ClientHandler client, String[] parts) {
