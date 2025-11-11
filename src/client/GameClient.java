@@ -626,8 +626,11 @@ public class GameClient {
     }
 
     private void handleScores(String[] parts) {
-        // parts[1] is a semicolon-separated list of scoreboard lines
-        String payload = parts.length > 1 ? parts[1] : "";
+        // Original message format: SCORES <line1>; <line2>; ...
+        // Spaces may exist inside each line (timestamp + outcome), so rebuild payload from full raw message.
+        String raw = String.join(" ", parts); // includes command again at start
+        int firstSpace = raw.indexOf(' ');
+        String payload = firstSpace >= 0 ? raw.substring(firstSpace + 1) : "";
         java.util.Map<String, PlayerStats> map = aggregateScores(payload);
         java.util.List<PlayerStats> list = new java.util.ArrayList<>(map.values());
         list.sort((a, b) -> {
