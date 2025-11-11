@@ -9,9 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Simple scoreboard utility that appends match summaries to a text file
@@ -72,6 +70,70 @@ public class Scoreboard {
             return List.copyOf(all);
         }
         return List.copyOf(all.subList(Math.max(all.size() - limit, 0), all.size()));
+    }
+
+    /** Parsed aggregate stats for a player */
+    public static final class PlayerStats {
+        public final String name;
+        public int wins;
+        public int losses;
+        public int draws;
+        public PlayerStats(String name) { this.name = name; }
+        public int games() { return wins + losses + draws; }
+    }
+
+    /** Compute leaderboard map from all lines in the scoreboard file */
+    public synchronized Map<String, PlayerStats> computeLeaderboard() {
+        Map<String, PlayerStats> map = new HashMap<>();
+        List<String> lines;
+        try {
+            lines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return map;
+        }
+
+        for (String line : lines) {
+            String[] parts = line.split("\\|", 4);
+            if (parts.length < 4) continue;
+            String p1 = parts[1].trim();
+            String p2 = parts[2].trim();
+            String outcome = parts[3].trim();
+
+            PlayerStats s1 = map.computeIfAbsent(p1, PlayerStats::new);
+            PlayerStats s2 = map.computeIfAbsent(p2, PlayerStats::new);
+
+            if (outcome.endsWith(" wins")) {
+                String winner = outcome.substring(0, outcome.length() - 5).trim();
+                if (winner.equals(p1)) { s1.wins++; s2.losses++; }
+                else if (winner.equals(p2)) { s2.wins++; s1.losses++; }
+            } else if (outcome.endsWith(" forfeited")) {
+                String forfeiter = outcome.substring(0, outcome.length() - " forfeited".length()).trim();
+                if (forfeiter.equals(p1)) { s2.wins++; s1.losses++; }
+                else if (forfeiter.equals(p2)) { s1.wins++; s2.losses++; }
+            } else if (outcome.startsWith("Draw")) {
+                s1.draws++; s2.draws++;
+            }
+        }
+        return map;
+    }
+
+    /** Return sorted leaderboard rows */
+    public synchronized List<PlayerStats> topSorted(int limit) {
+        Map<String, PlayerStats> map = computeLeaderboard();
+        java.util.List<PlayerStats> list = new java.util.ArrayList<>(map.values());
+        list.sort((a,b) -> {
+            int c = Integer.compare(b.wins, a.wins);
+            if (c!=0) return c;
+            c = Integer.compare(b.draws, a.draws);
+            if (c!=0) return c;
+            c = Integer.compare(b.games(), a.games());
+            if (c!=0) return c;
+            return a.name.compareToIgnoreCase(b.name);
+        });
+        if (limit > 0 && list.size() > limit) {
+            return list.subList(0, limit);
+        }
+        return list;
     }
 
     public Path getFilePath() {

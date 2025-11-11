@@ -195,8 +195,9 @@ public class GameServer {
     }
 
     private void handleScoreRequest(ClientHandler client) {
-        List<String> recent = scoreboard.readRecent(10);
-        String payload = recent.stream()
+        // Send ALL stored results; client will aggregate for leaderboard
+        List<String> all = scoreboard.readRecent(0);
+        String payload = all.stream()
                 .collect(Collectors.joining(";"));
         client.send(String.join(Protocol.DELIMITER, Protocol.SCORES, payload));
     }
@@ -237,7 +238,12 @@ public class GameServer {
                     result.getLoser() != null ? result.getLoser().getSafeName() : null,
                     result.getSummary(),
                     endedAt);
-            case DRAW -> scoreboard.recordResult("DRAW", "DRAW", result.getSummary(), endedAt);
+            case DRAW -> {
+                // Record both actual player names so clients can compute per-player draws
+                String xName = session.getPlayerX() != null ? session.getPlayerX().getSafeName() : "DRAW";
+                String oName = session.getPlayerO() != null ? session.getPlayerO().getSafeName() : "DRAW";
+                scoreboard.recordResult(xName, oName, result.getSummary(), endedAt);
+            }
             case ABORTED -> {
                 // no-op
             }
