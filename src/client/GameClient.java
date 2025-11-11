@@ -337,9 +337,18 @@ public class GameClient {
 
     private void handleConnect() {
         String name = nameField.getText().trim();
-        if (name.isEmpty()) {
-            JOptionPane.showMessageDialog(mainFrame, "Please enter your name");
-            return;
+        connectToServer(name);
+    }
+
+    /**
+     * Public method to programmatically connect the client to the default
+     * host/port.
+     * Returns true on success.
+     */
+    public boolean connectToServer(String name) {
+        if (name == null || name.isEmpty()) {
+            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, "Please enter your name"));
+            return false;
         }
 
         try {
@@ -351,8 +360,10 @@ public class GameClient {
             }
 
             connected.set(true);
-            connectButton.setEnabled(false);
-            nameField.setEnabled(false);
+            SwingUtilities.invokeLater(() -> {
+                connectButton.setEnabled(false);
+                nameField.setEnabled(false);
+            });
 
             // Start message listening thread
             Thread messageThread = new Thread(this::listenForMessages, "message-listener");
@@ -362,12 +373,16 @@ public class GameClient {
             // Send JOIN command
             sendMessage(String.join(DELIMITER, JOIN, name));
             appendLog("Connecting as " + name + "...");
+            return true;
 
         } catch (IOException e) {
             appendLog("Connection failed: " + e.getMessage());
             connected.set(false);
-            connectButton.setEnabled(true);
-            nameField.setEnabled(true);
+            SwingUtilities.invokeLater(() -> {
+                connectButton.setEnabled(true);
+                nameField.setEnabled(true);
+            });
+            return false;
         }
     }
 

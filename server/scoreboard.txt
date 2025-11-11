@@ -7,3 +7,8 @@
 2025-11-11 12:16:38|gon|don|don forfeited
 2025-11-11 12:21:04|moo|goo|moo wins
 2025-11-11 12:21:22|moo|goo|goo forfeited
+2025-11-11 12:48:10|DRAW|DRAW|Draw - Board full
+2025-11-11 12:48:32|Client2|Client1|Client2 wins
+2025-11-11 12:48:40|Client1|Client2|Client2 forfeited
+2025-11-11 12:58:42|DRAW|DRAW|Draw - Board full
+2025-11-11 12:58:50|meows|Geezus|Geezus forfeited
