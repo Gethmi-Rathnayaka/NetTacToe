@@ -36,6 +36,7 @@ public class GameClient {
     private static final String ERROR = "ERROR";
     private static final String GET_SCORES = "GET_SCORES";
     private static final String SCORES = "SCORES";
+    private static final String MESSAGE = "MESSAGE";
 
     // Board constants (copied locally)
     private static final int BOARD_SIZE = 3;
@@ -61,6 +62,10 @@ public class GameClient {
     private JButton restartButton;
     private JButton leaderboardButton;
     private JTextArea logArea;
+    // Chat UI
+    private JTextArea chatArea;
+    private JTextField chatInput;
+    private JButton sendChatButton;
 
     // Game State
     private String playerName;
@@ -142,9 +147,9 @@ public class GameClient {
         restartButton.setEnabled(false);
         panel.add(restartButton);
 
-    leaderboardButton = new JButton("View Leaderboard");
-    leaderboardButton.addActionListener(e -> requestLeaderboard());
-    panel.add(leaderboardButton);
+        leaderboardButton = new JButton("View Leaderboard");
+        leaderboardButton.addActionListener(e -> requestLeaderboard());
+        panel.add(leaderboardButton);
 
         return panel;
     }
@@ -223,16 +228,66 @@ public class GameClient {
     }
 
     private JPanel createLogPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Game Log"));
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
 
-        logArea = new JTextArea(20, 25);
+        // Top: Game log
+        JPanel logPanel = new JPanel(new BorderLayout());
+        logPanel.setBorder(BorderFactory.createTitledBorder("Game Log"));
+        logArea = new JTextArea(10, 25);
         logArea.setEditable(false);
         logArea.setFont(new Font("Monospaced", Font.PLAIN, 10));
-        JScrollPane scrollPane = new JScrollPane(logArea);
-        panel.add(scrollPane, BorderLayout.CENTER);
+        JScrollPane logScroll = new JScrollPane(logArea);
+        logPanel.add(logScroll, BorderLayout.CENTER);
 
+        // Bottom: Chat area
+        JPanel chatPanel = new JPanel(new BorderLayout());
+        chatPanel.setBorder(BorderFactory.createTitledBorder("Chat (to opponent)"));
+        chatArea = new JTextArea(8, 25);
+        chatArea.setEditable(false);
+        chatArea.setLineWrap(true);
+        chatArea.setWrapStyleWord(true);
+        chatArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JScrollPane chatScroll = new JScrollPane(chatArea);
+
+        JPanel inputRow = new JPanel(new BorderLayout(4, 4));
+        chatInput = new JTextField();
+        sendChatButton = new JButton("Send");
+        sendChatButton.addActionListener(e -> sendChat());
+        chatInput.addActionListener(e -> sendChat());
+        inputRow.add(chatInput, BorderLayout.CENTER);
+        inputRow.add(sendChatButton, BorderLayout.EAST);
+
+        chatPanel.add(chatScroll, BorderLayout.CENTER);
+        chatPanel.add(inputRow, BorderLayout.SOUTH);
+
+        // Combine log + chat vertically
+        JPanel combined = new JPanel();
+        combined.setLayout(new BorderLayout());
+        combined.add(logPanel, BorderLayout.NORTH);
+        combined.add(chatPanel, BorderLayout.CENTER);
+
+        panel.add(combined, BorderLayout.CENTER);
         return panel;
+    }
+
+    private void sendChat() {
+        String text = chatInput.getText();
+        if (text == null || text.isBlank() || !connected.get())
+            return;
+        // Send MESSAGE <text> to server; server will forward to opponent
+        sendMessage(String.join(DELIMITER, MESSAGE, text));
+        // locally echo
+        appendChat(playerName != null ? playerName : "Me", text);
+        chatInput.setText("");
+    }
+
+    private void appendChat(String sender, String text) {
+        SwingUtilities.invokeLater(() -> {
+            String time = java.time.LocalTime.now().toString().substring(0, 8);
+            chatArea.append("[" + time + "] " + sender + ": " + text + "\n");
+            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+        });
     }
 
     /**
@@ -438,6 +493,7 @@ public class GameClient {
                         case WELCOME -> handleWelcome(parts);
                         case START -> handleGameStart(parts);
                         case UPDATE -> handleBoardUpdate(parts);
+                        case MESSAGE -> handleChatMessage(parts);
                         case YOUR_TURN -> handleYourTurn();
                         case OPPONENT_TURN -> handleOpponentTurn();
                         case WIN -> handleGameEnd("You Won!", Color.GREEN);
@@ -484,6 +540,14 @@ public class GameClient {
             lastMoveCol = -1;
             updateBoardDisplay();
         }
+    }
+
+    private void handleChatMessage(String[] parts) {
+        if (parts.length < 3)
+            return; // expected: MESSAGE <sender> <text>
+        String sender = parts[1];
+        String text = parts[2];
+        appendChat(sender, text);
     }
 
     private void handleBoardUpdate(String[] parts) {
@@ -607,19 +671,19 @@ public class GameClient {
         String error = parts.length > 1 ? parts[1] : "Unknown error";
         statusLabel.setText("Error: " + error);
         statusLabel.setForeground(Color.RED);
-        // Show a popup so the user immediately notices the error (e.g., "Not your turn")
-        SwingUtilities.invokeLater(() ->
-            JOptionPane.showMessageDialog(mainFrame,
-                    error,
-                    "Server Error",
-                    JOptionPane.WARNING_MESSAGE)
-        );
+        // Show a popup so the user immediately notices the error (e.g., "Not your
+        // turn")
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame,
+                error,
+                "Server Error",
+                JOptionPane.WARNING_MESSAGE));
     }
 
     private void requestLeaderboard() {
         if (!connected.get()) {
             appendLog("Not connected to server.");
-            JOptionPane.showMessageDialog(mainFrame, "Connect to the server first.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(mainFrame, "Connect to the server first.", "Info",
+                    JOptionPane.INFORMATION_MESSAGE);
             return;
         }
         sendMessage(GET_SCORES);
@@ -627,7 +691,8 @@ public class GameClient {
 
     private void handleScores(String[] parts) {
         // Original message format: SCORES <line1>; <line2>; ...
-        // Spaces may exist inside each line (timestamp + outcome), so rebuild payload from full raw message.
+        // Spaces may exist inside each line (timestamp + outcome), so rebuild payload
+        // from full raw message.
         String raw = String.join(" ", parts); // includes command again at start
         int firstSpace = raw.indexOf(' ');
         String payload = firstSpace >= 0 ? raw.substring(firstSpace + 1) : "";
@@ -635,11 +700,14 @@ public class GameClient {
         java.util.List<PlayerStats> list = new java.util.ArrayList<>(map.values());
         list.sort((a, b) -> {
             int c = Integer.compare(b.wins, a.wins);
-            if (c != 0) return c;
+            if (c != 0)
+                return c;
             c = Integer.compare(b.draws, a.draws);
-            if (c != 0) return c;
+            if (c != 0)
+                return c;
             c = Integer.compare(b.games(), a.games());
-            if (c != 0) return c;
+            if (c != 0)
+                return c;
             return a.name.compareToIgnoreCase(b.name);
         });
 
@@ -655,20 +723,31 @@ public class GameClient {
 
     private static class PlayerStats {
         final String name;
-        int wins; int losses; int draws;
-        PlayerStats(String name) { this.name = name; }
-        int games() { return wins + losses + draws; }
+        int wins;
+        int losses;
+        int draws;
+
+        PlayerStats(String name) {
+            this.name = name;
+        }
+
+        int games() {
+            return wins + losses + draws;
+        }
     }
 
     private java.util.Map<String, PlayerStats> aggregateScores(String payload) {
         java.util.Map<String, PlayerStats> map = new java.util.HashMap<>();
-        if (payload == null || payload.isBlank()) return map;
+        if (payload == null || payload.isBlank())
+            return map;
         String[] lines = payload.split(";");
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.isEmpty()) continue;
+            if (trimmed.isEmpty())
+                continue;
             String[] parts = trimmed.split("\\|", 4);
-            if (parts.length < 4) continue;
+            if (parts.length < 4)
+                continue;
             String p1 = parts[1].trim();
             String p2 = parts[2].trim();
             String outcome = parts[3].trim();
@@ -678,15 +757,26 @@ public class GameClient {
 
             if (outcome.endsWith(" wins")) {
                 String winner = outcome.substring(0, outcome.length() - 5).trim();
-                if (winner.equals(p1)) { s1.wins++; s2.losses++; }
-                else if (winner.equals(p2)) { s2.wins++; s1.losses++; }
+                if (winner.equals(p1)) {
+                    s1.wins++;
+                    s2.losses++;
+                } else if (winner.equals(p2)) {
+                    s2.wins++;
+                    s1.losses++;
+                }
             } else if (outcome.endsWith(" forfeited")) {
                 String forfeiter = outcome.substring(0, outcome.length() - " forfeited".length()).trim();
-                if (forfeiter.equals(p1)) { s2.wins++; s1.losses++; }
-                else if (forfeiter.equals(p2)) { s1.wins++; s2.losses++; }
+                if (forfeiter.equals(p1)) {
+                    s2.wins++;
+                    s1.losses++;
+                } else if (forfeiter.equals(p2)) {
+                    s1.wins++;
+                    s2.losses++;
+                }
             } else if (outcome.startsWith("Draw")) {
                 // With updated server, p1 and p2 will be actual names for draws
-                s1.draws++; s2.draws++;
+                s1.draws++;
+                s2.draws++;
             }
         }
         // Remove synthetic DRAW key if present
