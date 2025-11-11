@@ -53,6 +53,7 @@ public class GameClient {
     private JButton[][] boardButtons;
     private JLabel statusLabel;
     private JLabel playerInfoLabel;
+    private JLabel turnIndicatorLabel;
     private JTextField nameField;
     private JButton connectButton;
     private JButton restartButton;
@@ -189,7 +190,7 @@ public class GameClient {
     }
 
     private JPanel createInfoPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 1));
+        JPanel panel = new JPanel(new GridLayout(3, 1));
         panel.setBorder(BorderFactory.createTitledBorder("Game Info"));
 
         playerInfoLabel = new JLabel("Not connected");
@@ -197,8 +198,19 @@ public class GameClient {
         panel.add(playerInfoLabel);
 
         statusLabel = new JLabel("Connect to start playing");
-        statusLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+        statusLabel.setFont(new Font("Arial", Font.BOLD, 13));
+        statusLabel.setOpaque(true);
+        statusLabel.setBackground(Color.LIGHT_GRAY);
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         panel.add(statusLabel);
+
+        // Prominent turn indicator banner
+        turnIndicatorLabel = new JLabel("Waiting...", SwingConstants.CENTER);
+        turnIndicatorLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        turnIndicatorLabel.setOpaque(true);
+        turnIndicatorLabel.setBackground(new Color(220, 220, 220));
+        turnIndicatorLabel.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        panel.add(turnIndicatorLabel);
 
         return panel;
     }
@@ -485,6 +497,17 @@ public class GameClient {
                 }
             }
 
+            // parts[3] (optional) contains the symbol whose turn it is ("X" or "O")
+            if (parts.length > 3 && parts[3] != null && !parts[3].isBlank()) {
+                String currentTurnSymbol = parts[3].trim();
+                if (assignedSymbol != null && assignedSymbol.equals(currentTurnSymbol)) {
+                    // It's our turn according to server board update
+                    handleYourTurn();
+                } else {
+                    handleOpponentTurn();
+                }
+            }
+
             updateBoardDisplay();
             appendLog("Board updated - Last move: (" + lastMoveRow + "," + lastMoveCol + ")");
         }
@@ -519,14 +542,24 @@ public class GameClient {
     private void handleYourTurn() {
         isMyTurn = true;
         statusLabel.setText("Your turn - Click a cell to make your move");
-        statusLabel.setForeground(Color.BLUE);
+        statusLabel.setForeground(Color.BLACK);
+        statusLabel.setBackground(new Color(200, 255, 200)); // pale green
+        if (turnIndicatorLabel != null) {
+            turnIndicatorLabel.setText("YOUR TURN");
+            turnIndicatorLabel.setBackground(new Color(180, 230, 180));
+        }
         updateBoardDisplay();
     }
 
     private void handleOpponentTurn() {
         isMyTurn = false;
         statusLabel.setText("Opponent's turn - Please wait");
-        statusLabel.setForeground(Color.RED);
+        statusLabel.setForeground(Color.BLACK);
+        statusLabel.setBackground(new Color(255, 230, 230)); // pale red
+        if (turnIndicatorLabel != null) {
+            turnIndicatorLabel.setText("Waiting for Opponent");
+            turnIndicatorLabel.setBackground(new Color(240, 240, 240));
+        }
         updateBoardDisplay();
     }
 
@@ -566,6 +599,13 @@ public class GameClient {
         String error = parts.length > 1 ? parts[1] : "Unknown error";
         statusLabel.setText("Error: " + error);
         statusLabel.setForeground(Color.RED);
+        // Show a popup so the user immediately notices the error (e.g., "Not your turn")
+        SwingUtilities.invokeLater(() ->
+            JOptionPane.showMessageDialog(mainFrame,
+                    error,
+                    "Server Error",
+                    JOptionPane.WARNING_MESSAGE)
+        );
     }
 
     private void sendMessage(String message) {

@@ -48,7 +48,14 @@ public class GameSessionManager {
 
     public void handleMove(ClientHandler client, int row, int col) {
         findSessionByClient(client).ifPresentOrElse(
-                session -> session.handleMove(client, row, col),
+                session -> {
+                    // Defensive: quick-check turn ownership before delegating
+                    if (session.getCurrentTurn() != client) {
+                        client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Not your turn"));
+                    } else {
+                        session.handleMove(client, row, col);
+                    }
+                },
                 () -> client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Not in an active session")));
     }
 
