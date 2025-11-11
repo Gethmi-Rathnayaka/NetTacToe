@@ -9,8 +9,8 @@ import shared.Protocol;
 /**
  * Represents a single game session between two connected players.
  * <p>
- * NOTE: This class provides only the lifecycle scaffolding. Member 4
- * is expected to extend the gameplay logic (board state, win checks, etc.).
+ * NOTE: This class provides only the lifecycle scaffolding.
+ * Gameplay logic (board state, win checks, etc.) is expected to be implemented elsewhere.
  */
 public class GameSession implements Runnable {
 
@@ -24,7 +24,7 @@ public class GameSession implements Runnable {
     private volatile Instant startedAt;
     private volatile Instant endedAt;
     
-    // Member 4: Game State Management
+    // Game State Management
     private final Board gameBoard = new Board();
     private final Object boardLock = new Object();
 
@@ -57,7 +57,7 @@ public class GameSession implements Runnable {
         currentTurn.set(playerX);
         server.refreshSessionView();
 
-        // Member 4: Send initial board state and turn notifications
+    // Send initial board state and turn notifications
         broadcastBoardUpdate();
         playerX.send(Protocol.YOUR_TURN);
         playerO.send(Protocol.OPPONENT_TURN);
@@ -114,7 +114,7 @@ public class GameSession implements Runnable {
     }
     
     /**
-     * Member 4: Broadcast the current board state to both players
+     * Broadcast the current board state to both players
      */
     private void broadcastBoardUpdate() {
         String boardData = gameBoard.serialize();
@@ -135,7 +135,7 @@ public class GameSession implements Runnable {
     }
     
     /**
-     * Member 4: Get the current board state (for debugging/admin purposes)
+     * Get the current board state (for debugging/admin purposes)
      */
     public Board getGameBoard() {
         synchronized (boardLock) {
@@ -144,7 +144,7 @@ public class GameSession implements Runnable {
     }
     
     /**
-     * Member 4: Reset the game board for restart functionality
+     * Reset the game board for restart functionality
      */
     public void resetBoard() {
         synchronized (boardLock) {
@@ -181,7 +181,7 @@ public class GameSession implements Runnable {
             return;
         }
 
-        // Member 4: Game State Management Implementation
+    // Game State Management Implementation
         synchronized (boardLock) {
             // Validate move
             if (!gameBoard.isValidMove(row, col)) {

@@ -3,7 +3,7 @@ package test;
 import common.Board;
 
 /**
- * Simple test class to verify Member 4's Board implementation works correctly
+ * Simple test class to verify the Board implementation works correctly
  */
 public class BoardTest {
     

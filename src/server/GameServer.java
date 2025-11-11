@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import shared.Protocol;
 import utils.Scoreboard;
 
@@ -43,6 +44,13 @@ public class GameServer {
     }
 
     public static void main(String[] args) {
+        try {
+            // Use your system’s native look
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            System.err.println("Failed to set look and feel: " + e.getMessage());
+        }
+
         GameServer server = new GameServer(5000);
         SwingUtilities.invokeLater(server.getUi()::show);
     }
@@ -173,8 +181,8 @@ public class GameServer {
             client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "No active session to restart"));
             return;
         }
-        
-        // Member 4: Implement board reset logic
+
+        // Implement board reset logic
         log("Restart requested by " + client.getSafeName() + " for session " + session.getSessionId());
         session.resetBoard();
         log("Board reset for session " + session.getSessionId());
@@ -212,8 +220,9 @@ public class GameServer {
     }
 
     public void onMoveRequested(GameSession session, ClientHandler player, int row, int col) {
-        // Member 4: Delegate to GameSession's board logic
-        log("Move request from " + player.getSafeName() + " at (" + row + "," + col + ") in session " + session.getSessionId());
+        // Delegate to GameSession's board logic
+        log("Move request from " + player.getSafeName() + " at (" + row + "," + col + ") in session "
+                + session.getSessionId());
         session.handleMove(player, row, col);
     }
 
