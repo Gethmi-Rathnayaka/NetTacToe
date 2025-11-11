@@ -34,6 +34,8 @@ public class GameClient {
     private static final String GAME_RESET = "GAME_RESET";
     private static final String RESTART = "RESTART";
     private static final String ERROR = "ERROR";
+    private static final String GET_SCORES = "GET_SCORES";
+    private static final String SCORES = "SCORES";
 
     // Board constants (copied locally)
     private static final int BOARD_SIZE = 3;
@@ -53,9 +55,11 @@ public class GameClient {
     private JButton[][] boardButtons;
     private JLabel statusLabel;
     private JLabel playerInfoLabel;
+    private JLabel turnIndicatorLabel;
     private JTextField nameField;
     private JButton connectButton;
     private JButton restartButton;
+    private JButton leaderboardButton;
     private JTextArea logArea;
 
     // Game State
@@ -138,6 +142,10 @@ public class GameClient {
         restartButton.setEnabled(false);
         panel.add(restartButton);
 
+    leaderboardButton = new JButton("View Leaderboard");
+    leaderboardButton.addActionListener(e -> requestLeaderboard());
+    panel.add(leaderboardButton);
+
         return panel;
     }
 
@@ -189,7 +197,7 @@ public class GameClient {
     }
 
     private JPanel createInfoPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 1));
+        JPanel panel = new JPanel(new GridLayout(3, 1));
         panel.setBorder(BorderFactory.createTitledBorder("Game Info"));
 
         playerInfoLabel = new JLabel("Not connected");
@@ -197,8 +205,19 @@ public class GameClient {
         panel.add(playerInfoLabel);
 
         statusLabel = new JLabel("Connect to start playing");
-        statusLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+        statusLabel.setFont(new Font("Arial", Font.BOLD, 13));
+        statusLabel.setOpaque(true);
+        statusLabel.setBackground(Color.LIGHT_GRAY);
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         panel.add(statusLabel);
+
+        // Prominent turn indicator banner
+        turnIndicatorLabel = new JLabel("Waiting...", SwingConstants.CENTER);
+        turnIndicatorLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        turnIndicatorLabel.setOpaque(true);
+        turnIndicatorLabel.setBackground(new Color(220, 220, 220));
+        turnIndicatorLabel.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        panel.add(turnIndicatorLabel);
 
         return panel;
     }
@@ -442,6 +461,7 @@ public class GameClient {
                         case FORFEIT -> handleGameEnd("Opponent Forfeited - You Win!", Color.GREEN);
                         case SESSION_END -> handleSessionEnd(parts);
                         case GAME_RESET -> handleGameReset(parts);
+                        case SCORES -> handleScores(parts);
                         case ERROR -> handleError(parts);
                         default -> appendLog("Unknown command: " + command);
                     }
@@ -500,6 +520,17 @@ public class GameClient {
                 }
             }
 
+            // parts[3] (optional) contains the symbol whose turn it is ("X" or "O")
+            if (parts.length > 3 && parts[3] != null && !parts[3].isBlank()) {
+                String currentTurnSymbol = parts[3].trim();
+                if (assignedSymbol != null && assignedSymbol.equals(currentTurnSymbol)) {
+                    // It's our turn according to server board update
+                    handleYourTurn();
+                } else {
+                    handleOpponentTurn();
+                }
+            }
+
             updateBoardDisplay();
             appendLog("Board updated - Last move: (" + lastMoveRow + "," + lastMoveCol + ")");
         }
@@ -534,14 +565,24 @@ public class GameClient {
     private void handleYourTurn() {
         isMyTurn = true;
         statusLabel.setText("Your turn - Click a cell to make your move");
-        statusLabel.setForeground(Color.BLUE);
+        statusLabel.setForeground(Color.BLACK);
+        statusLabel.setBackground(new Color(200, 255, 200)); // pale green
+        if (turnIndicatorLabel != null) {
+            turnIndicatorLabel.setText("YOUR TURN");
+            turnIndicatorLabel.setBackground(new Color(180, 230, 180));
+        }
         updateBoardDisplay();
     }
 
     private void handleOpponentTurn() {
         isMyTurn = false;
         statusLabel.setText("Opponent's turn - Please wait");
-        statusLabel.setForeground(Color.RED);
+        statusLabel.setForeground(Color.BLACK);
+        statusLabel.setBackground(new Color(255, 230, 230)); // pale red
+        if (turnIndicatorLabel != null) {
+            turnIndicatorLabel.setText("Waiting for Opponent");
+            turnIndicatorLabel.setBackground(new Color(240, 240, 240));
+        }
         updateBoardDisplay();
     }
 
@@ -581,6 +622,91 @@ public class GameClient {
         String error = parts.length > 1 ? parts[1] : "Unknown error";
         statusLabel.setText("Error: " + error);
         statusLabel.setForeground(Color.RED);
+        // Show a popup so the user immediately notices the error (e.g., "Not your turn")
+        SwingUtilities.invokeLater(() ->
+            JOptionPane.showMessageDialog(mainFrame,
+                    error,
+                    "Server Error",
+                    JOptionPane.WARNING_MESSAGE)
+        );
+    }
+
+    private void requestLeaderboard() {
+        if (!connected.get()) {
+            appendLog("Not connected to server.");
+            JOptionPane.showMessageDialog(mainFrame, "Connect to the server first.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        sendMessage(GET_SCORES);
+    }
+
+    private void handleScores(String[] parts) {
+        // Original message format: SCORES <line1>; <line2>; ...
+        // Spaces may exist inside each line (timestamp + outcome), so rebuild payload from full raw message.
+        String raw = String.join(" ", parts); // includes command again at start
+        int firstSpace = raw.indexOf(' ');
+        String payload = firstSpace >= 0 ? raw.substring(firstSpace + 1) : "";
+        java.util.Map<String, PlayerStats> map = aggregateScores(payload);
+        java.util.List<PlayerStats> list = new java.util.ArrayList<>(map.values());
+        list.sort((a, b) -> {
+            int c = Integer.compare(b.wins, a.wins);
+            if (c != 0) return c;
+            c = Integer.compare(b.draws, a.draws);
+            if (c != 0) return c;
+            c = Integer.compare(b.games(), a.games());
+            if (c != 0) return c;
+            return a.name.compareToIgnoreCase(b.name);
+        });
+
+        SwingUtilities.invokeLater(() -> {
+            java.util.List<LeaderboardDialog.Row> rows = new java.util.ArrayList<>();
+            for (PlayerStats ps : list) {
+                rows.add(new LeaderboardDialog.Row(ps.name, ps.wins, ps.losses, ps.draws, ps.games()));
+            }
+            LeaderboardDialog dlg = new LeaderboardDialog(mainFrame, rows, playerName);
+            dlg.setVisible(true);
+        });
+    }
+
+    private static class PlayerStats {
+        final String name;
+        int wins; int losses; int draws;
+        PlayerStats(String name) { this.name = name; }
+        int games() { return wins + losses + draws; }
+    }
+
+    private java.util.Map<String, PlayerStats> aggregateScores(String payload) {
+        java.util.Map<String, PlayerStats> map = new java.util.HashMap<>();
+        if (payload == null || payload.isBlank()) return map;
+        String[] lines = payload.split(";");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+            String[] parts = trimmed.split("\\|", 4);
+            if (parts.length < 4) continue;
+            String p1 = parts[1].trim();
+            String p2 = parts[2].trim();
+            String outcome = parts[3].trim();
+
+            PlayerStats s1 = map.computeIfAbsent(p1, PlayerStats::new);
+            PlayerStats s2 = map.computeIfAbsent(p2, PlayerStats::new);
+
+            if (outcome.endsWith(" wins")) {
+                String winner = outcome.substring(0, outcome.length() - 5).trim();
+                if (winner.equals(p1)) { s1.wins++; s2.losses++; }
+                else if (winner.equals(p2)) { s2.wins++; s1.losses++; }
+            } else if (outcome.endsWith(" forfeited")) {
+                String forfeiter = outcome.substring(0, outcome.length() - " forfeited".length()).trim();
+                if (forfeiter.equals(p1)) { s2.wins++; s1.losses++; }
+                else if (forfeiter.equals(p2)) { s1.wins++; s2.losses++; }
+            } else if (outcome.startsWith("Draw")) {
+                // With updated server, p1 and p2 will be actual names for draws
+                s1.draws++; s2.draws++;
+            }
+        }
+        // Remove synthetic DRAW key if present
+        map.remove("DRAW");
+        return map;
     }
 
     private void sendMessage(String message) {

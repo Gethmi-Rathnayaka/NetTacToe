@@ -1,4 +1,17 @@
-@echo off
+# 1) Compile everything into out/
+javac -d out -sourcepath src src\**\*.java
+
+# 2) Run board tests (prints to console)
+java -cp out test.BoardTest
+java -cp out test.BoardSerializationTest
+java -cp out test.ClientDeserializationTest
+
+# 3) Start server (opens Server UI)
+java -cp out server.GameServer
+
+# 4) Start two clients (each opens a Swing client window)
+java -cp out client.GameClient
+java -cp out client.GameClient@echo off
 echo ===================================================
 echo    NetTacToe - Member 4 Implementation Demo
 echo ===================================================
