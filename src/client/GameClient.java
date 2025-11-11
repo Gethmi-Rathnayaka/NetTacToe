@@ -36,6 +36,7 @@ public class GameClient {
     private static final String ERROR = "ERROR";
     private static final String GET_SCORES = "GET_SCORES";
     private static final String SCORES = "SCORES";
+    private static final String LOG = "LOG";
     private static final String MESSAGE = "MESSAGE";
 
     // Board constants (copied locally)
@@ -61,7 +62,6 @@ public class GameClient {
     private JButton connectButton;
     private JButton restartButton;
     private JButton leaderboardButton;
-    private JTextArea logArea;
     // Chat UI
     private JTextArea chatArea;
     private JTextField chatInput;
@@ -228,22 +228,11 @@ public class GameClient {
     }
 
     private JPanel createLogPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout());
-
-        // Top: Game log
-        JPanel logPanel = new JPanel(new BorderLayout());
-        logPanel.setBorder(BorderFactory.createTitledBorder("Game Log"));
-        logArea = new JTextArea(10, 25);
-        logArea.setEditable(false);
-        logArea.setFont(new Font("Monospaced", Font.PLAIN, 10));
-        JScrollPane logScroll = new JScrollPane(logArea);
-        logPanel.add(logScroll, BorderLayout.CENTER);
-
-        // Bottom: Chat area
+        // Right-side chat panel (no local game log)
+        JPanel panel = new JPanel(new BorderLayout());
         JPanel chatPanel = new JPanel(new BorderLayout());
         chatPanel.setBorder(BorderFactory.createTitledBorder("Chat (to opponent)"));
-        chatArea = new JTextArea(8, 25);
+        chatArea = new JTextArea(20, 25);
         chatArea.setEditable(false);
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
@@ -261,13 +250,7 @@ public class GameClient {
         chatPanel.add(chatScroll, BorderLayout.CENTER);
         chatPanel.add(inputRow, BorderLayout.SOUTH);
 
-        // Combine log + chat vertically
-        JPanel combined = new JPanel();
-        combined.setLayout(new BorderLayout());
-        combined.add(logPanel, BorderLayout.NORTH);
-        combined.add(chatPanel, BorderLayout.CENTER);
-
-        panel.add(combined, BorderLayout.CENTER);
+        panel.add(chatPanel, BorderLayout.CENTER);
         return panel;
     }
 
@@ -833,10 +816,17 @@ public class GameClient {
     }
 
     private void appendLog(String text) {
-        SwingUtilities.invokeLater(() -> {
-            logArea.append("[" + java.time.LocalTime.now().toString().substring(0, 8) + "] " + text + "\n");
-            logArea.setCaretPosition(logArea.getDocument().getLength());
-        });
+        String line = "[" + java.time.LocalTime.now().toString().substring(0, 8) + "] " + text;
+        // Print to local console
+        System.out.println(line);
+        // Forward to server UI if connected
+        if (connected.get()) {
+            try {
+                sendMessage(String.join(DELIMITER, LOG, line));
+            } catch (Exception ignored) {
+                // best-effort
+            }
+        }
     }
 
     public void show() {

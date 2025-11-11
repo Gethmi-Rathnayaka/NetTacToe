@@ -133,8 +133,19 @@ public class GameServer {
             case Protocol.QUIT -> handleQuit(client);
             case Protocol.PING -> client.send(Protocol.PONG);
             case Protocol.GET_SCORES -> handleScoreRequest(client);
+            case Protocol.LOG -> handleClientLog(client, message);
             default -> client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Unknown command: " + command));
         }
+    }
+
+    private void handleClientLog(ClientHandler client, String rawMessage) {
+        String payload = "";
+        int first = rawMessage.indexOf(' ');
+        if (first >= 0 && first + 1 < rawMessage.length()) {
+            payload = rawMessage.substring(first + 1).trim();
+        }
+        String who = client.getSafeName();
+        log("[CLIENT LOG] " + who + ": " + payload);
     }
 
     private void handleClientMessage(ClientHandler client, String rawMessage) {
