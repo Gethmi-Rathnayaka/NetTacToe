@@ -6,12 +6,11 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
-import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 
 /**
@@ -97,11 +96,13 @@ public class GameClient {
         File stickersDir = new File("resources/stickers");
         if (!stickersDir.exists() || !stickersDir.isDirectory()) return;
         File[] files = stickersDir.listFiles((d, name) -> {
+            
             String l = name.toLowerCase();
             return l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".gif");
         });
         if (files == null) return;
-        Arrays.sort(files);
+        Arrays.sort(files)
+            
         for (File f : files) {
             try {
                 BufferedImage img = ImageIO.read(f);
@@ -264,10 +265,10 @@ public class GameClient {
         JPanel chatPanel = new JPanel(new BorderLayout());
         chatPanel.setBorder(BorderFactory.createTitledBorder("Chat (to opponent)"));
     chatArea = new JTextPane();
-    chatArea.setEditable(false);
-    chatArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-    JScrollPane chatScroll = new JScrollPane(chatArea);
-
+        chatArea.setEditable(false)
+        chatArea.setFont(new Font("M
+        JScrollPane chatScroll = new JScrollPane(chatArea);
+        
         JPanel inputRow = new JPanel(new BorderLayout(4, 4));
         chatInput = new JTextField();
         sendChatButton = new JButton("Send");
@@ -307,7 +308,7 @@ public class GameClient {
 
         // Fallback emoji picker
         String[] stickers = new String[]{"😀", "🎉", "🔥", "❤️", "👍"};
-        JPanel box = new JPanel(new GridLayout(1, stickers.length, 6, 6));
+        JPanel box = new JPanel(new Grid L ayout(1, stickers.length, 6,  6));
         for (String s : stickers) {
             JButton b = new JButton(s);
             b.setFont(new Font("Dialog", Font.PLAIN, 24));
@@ -319,7 +320,8 @@ public class GameClient {
 
     private void sendSticker(String stickerId) {
         if (!connected.get()) return;
-        sendMessage(String.join(DELIMITER, STICKER, stickerId));
+        sendMessage(String.jo
+            n(DELIMITER, STICKER, stickerId));
         // locally echo sticker image if available
         appendSticker(playerName != null ? playerName : "Me", stickerId);
     }
