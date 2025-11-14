@@ -34,6 +34,7 @@ public final class Protocol {
     public static final String FORFEIT = "FORFEIT";
     public static final String SESSION_END = "SESSION_END";
     public static final String MESSAGE = "MESSAGE";
+    public static final String STICKER = "STICKER";
     public static final String LOG = "LOG";
     public static final String RESTART = "RESTART";
     public static final String BOARD_STATE = "BOARD_STATE";

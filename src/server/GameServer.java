@@ -129,6 +129,7 @@ public class GameServer {
             case Protocol.JOIN -> handleJoin(client, parts);
             case Protocol.MOVE -> handleMove(client, parts);
             case Protocol.MESSAGE -> handleClientMessage(client, message);
+            case Protocol.STICKER -> handleClientSticker(client, message);
             case Protocol.RESTART -> handleRestart(client);
             case Protocol.QUIT -> handleQuit(client);
             case Protocol.PING -> client.send(Protocol.PONG);
@@ -136,6 +137,31 @@ public class GameServer {
             case Protocol.LOG -> handleClientLog(client, message);
             default -> client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Unknown command: " + command));
         }
+    }
+
+    private void handleClientSticker(ClientHandler client, String rawMessage) {
+        // rawMessage: STICKER <stickerId>
+        String payload = "";
+        int first = rawMessage.indexOf(' ');
+        if (first >= 0 && first + 1 < rawMessage.length()) {
+            payload = rawMessage.substring(first + 1).trim();
+        }
+
+        GameSession session = client.getCurrentSession();
+        if (session == null) {
+            client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "Not in a session"));
+            return;
+        }
+
+        ClientHandler opponent = session.getOpponent(client);
+        if (opponent == null || !opponent.isActive()) {
+            client.send(String.join(Protocol.DELIMITER, Protocol.ERROR, "No opponent connected"));
+            return;
+        }
+
+        // Forward sticker id to opponent, include sender name
+        String forward = String.join(Protocol.DELIMITER, Protocol.STICKER, client.getSafeName(), payload);
+        opponent.send(forward);
     }
 
     private void handleClientLog(ClientHandler client, String rawMessage) {

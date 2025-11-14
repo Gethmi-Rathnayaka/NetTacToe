@@ -3,10 +3,16 @@ package client;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.*;
+import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 
 /**
  * GameClient with live board visualization implementation.
@@ -38,6 +44,7 @@ public class GameClient {
     private static final String SCORES = "SCORES";
     private static final String LOG = "LOG";
     private static final String MESSAGE = "MESSAGE";
+    private static final String STICKER = "STICKER";
 
     // Board constants (copied locally)
     private static final int BOARD_SIZE = 3;
@@ -62,10 +69,12 @@ public class GameClient {
     private JButton connectButton;
     private JButton restartButton;
     private JButton leaderboardButton;
-    // Chat UI
-    private JTextArea chatArea;
+    private JTextPane chatArea;
     private JTextField chatInput;
     private JButton sendChatButton;
+    private JButton stickerButton;
+    // Loaded sticker icons keyed by filename (sticker id)
+    private final Map<String, ImageIcon> stickerIcons = new HashMap<>();
 
     // Game State
     private String playerName;
@@ -80,7 +89,29 @@ public class GameClient {
     public GameClient() {
         gameBoard = new char[BOARD_SIZE][BOARD_SIZE];
         initializeBoard();
+        loadStickersFromResources();
         initializeUI();
+    }
+
+    private void loadStickersFromResources() {
+        File stickersDir = new File("resources/stickers");
+        if (!stickersDir.exists() || !stickersDir.isDirectory()) return;
+        File[] files = stickersDir.listFiles((d, name) -> {
+            String l = name.toLowerCase();
+            return l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".gif");
+        });
+        if (files == null) return;
+        Arrays.sort(files);
+        for (File f : files) {
+            try {
+                BufferedImage img = ImageIO.read(f);
+                if (img != null) {
+                    ImageIcon icon = new ImageIcon(img.getScaledInstance(64, 64, Image.SCALE_SMOOTH));
+                    stickerIcons.put(f.getName(), icon);
+                }
+            } catch (IOException ignored) {
+            }
+        }
     }
 
     private void initializeBoard() {
@@ -232,12 +263,10 @@ public class GameClient {
         JPanel panel = new JPanel(new BorderLayout());
         JPanel chatPanel = new JPanel(new BorderLayout());
         chatPanel.setBorder(BorderFactory.createTitledBorder("Chat (to opponent)"));
-        chatArea = new JTextArea(20, 25);
-        chatArea.setEditable(false);
-        chatArea.setLineWrap(true);
-        chatArea.setWrapStyleWord(true);
-        chatArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        JScrollPane chatScroll = new JScrollPane(chatArea);
+    chatArea = new JTextPane();
+    chatArea.setEditable(false);
+    chatArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+    JScrollPane chatScroll = new JScrollPane(chatArea);
 
         JPanel inputRow = new JPanel(new BorderLayout(4, 4));
         chatInput = new JTextField();
@@ -249,9 +278,50 @@ public class GameClient {
 
         chatPanel.add(chatScroll, BorderLayout.CENTER);
         chatPanel.add(inputRow, BorderLayout.SOUTH);
+        // Sticker button row above input
+        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        stickerButton = new JButton("Stickers");
+        stickerButton.addActionListener(e -> showStickerPicker());
+        topRow.add(stickerButton);
+        chatPanel.add(topRow, BorderLayout.NORTH);
 
         panel.add(chatPanel, BorderLayout.CENTER);
         return panel;
+    }
+
+    private void showStickerPicker() {
+        // If we loaded sticker images, show them; otherwise fall back to emoji choices
+        if (!stickerIcons.isEmpty()) {
+            int count = stickerIcons.size();
+            JPanel box = new JPanel(new GridLayout(0, Math.min(5, count), 6, 6));
+            for (String id : stickerIcons.keySet()) {
+                ImageIcon icon = stickerIcons.get(id);
+                JButton b = new JButton(icon);
+                b.setPreferredSize(new Dimension(64, 64));
+                b.addActionListener(ev -> sendSticker(id));
+                box.add(b);
+            }
+            JOptionPane.showMessageDialog(mainFrame, box, "Choose a sticker", JOptionPane.PLAIN_MESSAGE);
+            return;
+        }
+
+        // Fallback emoji picker
+        String[] stickers = new String[]{"😀", "🎉", "🔥", "❤️", "👍"};
+        JPanel box = new JPanel(new GridLayout(1, stickers.length, 6, 6));
+        for (String s : stickers) {
+            JButton b = new JButton(s);
+            b.setFont(new Font("Dialog", Font.PLAIN, 24));
+            b.addActionListener(ev -> sendSticker(s));
+            box.add(b);
+        }
+        JOptionPane.showMessageDialog(mainFrame, box, "Choose a sticker", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private void sendSticker(String stickerId) {
+        if (!connected.get()) return;
+        sendMessage(String.join(DELIMITER, STICKER, stickerId));
+        // locally echo sticker image if available
+        appendSticker(playerName != null ? playerName : "Me", stickerId);
     }
 
     private void sendChat() {
@@ -268,8 +338,15 @@ public class GameClient {
     private void appendChat(String sender, String text) {
         SwingUtilities.invokeLater(() -> {
             String time = java.time.LocalTime.now().toString().substring(0, 8);
-            chatArea.append("[" + time + "] " + sender + ": " + text + "\n");
-            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+            String line = "[" + time + "] " + sender + ": " + text + "\n";
+            StyledDocument doc = chatArea.getStyledDocument();
+            javax.swing.text.SimpleAttributeSet attrs = new javax.swing.text.SimpleAttributeSet();
+            javax.swing.text.StyleConstants.setFontFamily(attrs, "Monospaced");
+            try {
+                doc.insertString(doc.getLength(), line, attrs);
+            } catch (BadLocationException ignored) {
+            }
+            chatArea.setCaretPosition(doc.getLength());
         });
     }
 
@@ -477,6 +554,7 @@ public class GameClient {
                         case START -> handleGameStart(parts);
                         case UPDATE -> handleBoardUpdate(parts);
                         case MESSAGE -> handleChatMessage(parts);
+                        case STICKER -> handleStickerMessage(parts);
                         case YOUR_TURN -> handleYourTurn();
                         case OPPONENT_TURN -> handleOpponentTurn();
                         case WIN -> handleGameEnd("You Won!", Color.GREEN);
@@ -531,6 +609,40 @@ public class GameClient {
         String sender = parts[1];
         String text = parts[2];
         appendChat(sender, text);
+    }
+
+    private void handleStickerMessage(String[] parts) {
+        if (parts.length < 3)
+            return; // expected: STICKER <sender> <stickerId>
+        String sender = parts[1];
+        String sticker = parts[2];
+        // render incoming sticker image if we have it, otherwise fallback to text
+        appendSticker(sender, sticker);
+    }
+
+    private void appendSticker(String sender, String stickerId) {
+        SwingUtilities.invokeLater(() -> {
+            String time = java.time.LocalTime.now().toString().substring(0, 8);
+            StyledDocument doc = chatArea.getStyledDocument();
+            javax.swing.text.SimpleAttributeSet attrs = new javax.swing.text.SimpleAttributeSet();
+            javax.swing.text.StyleConstants.setFontFamily(attrs, "Monospaced");
+            try {
+                // prefix line
+                doc.insertString(doc.getLength(), "[" + time + "] " + sender + ": ", attrs);
+                ImageIcon icon = stickerIcons.get(stickerId);
+                if (icon != null) {
+                    // insert the icon and a newline
+                    chatArea.setCaretPosition(doc.getLength());
+                    chatArea.insertIcon(icon);
+                    doc.insertString(doc.getLength(), "\n", attrs);
+                } else {
+                    // fallback to showing the stickerId text (emoji or id)
+                    doc.insertString(doc.getLength(), stickerId + "\n", attrs);
+                }
+            } catch (BadLocationException ignored) {
+            }
+            chatArea.setCaretPosition(doc.getLength());
+        });
     }
 
     private void handleBoardUpdate(String[] parts) {
